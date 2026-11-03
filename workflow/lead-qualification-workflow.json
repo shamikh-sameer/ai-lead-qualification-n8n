@@ -1,0 +1,334 @@
+{
+  "name": "AI Lead Qualification & Follow-up",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-intake",
+        "options": {}
+      },
+      "id": "n1",
+      "name": "Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        128
+      ],
+      "webhookId": "lead-intake-demo"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "name",
+              "value": "={{ $json.body.name }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "email",
+              "value": "={{ $json.body.email }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "phone",
+              "value": "={{ $json.body.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "service",
+              "value": "={{ $json.body.service }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "message",
+              "value": "={{ $json.body.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n2",
+      "name": "Normalize Lead",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: 'You are a lead-qualification assistant for a local service business. Given a website enquiry, return ONLY JSON with keys: score (integer 1-10, 10 = ready to buy now), category (\"hot\", \"warm\" or \"cold\"), urgency (\"high\", \"medium\" or \"low\"), summary (one sentence for the owner), suggested_reply (a friendly 2-3 sentence reply to the lead that proposes booking a call). Score high for clear need, urgency, a budget or a specific service; score low for vague or spammy messages. In suggested_reply never invent phone numbers, prices, addresses, availability or arrival times; do not promise anything the business has not confirmed; just thank them, acknowledge their need, and invite them to book or reply.' }] }, contents: [{ parts: [{ text: 'Name: ' + $json.name + '\\nService: ' + $json.service + '\\nMessage: ' + $json.message }] }], generationConfig: { responseMimeType: 'application/json' } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n3",
+      "name": "Gemini: Qualify Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        128
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini API key (Header Auth: x-goog-api-key)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Normalize Lead').first().json;\nconst raw = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';\nlet ai;\ntry {\n  ai = JSON.parse(raw);\n} catch (e) {\n  ai = { score: 5, category: 'warm', urgency: 'medium', summary: 'AI response could not be parsed - review manually.', suggested_reply: '' };\n}\nai.score = Number(ai.score) || 5;\nreturn [{ json: { ...lead, ...ai, received_at: new Date().toISOString() } }];"
+      },
+      "id": "n4",
+      "name": "Parse AI Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "n5",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        912,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n6",
+      "name": "Hot lead? (score >= 7)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        912,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "Your Business <you@yourdomain.com>",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=Thanks {{ $json.name }} - let's get you sorted",
+        "emailFormat": "text",
+        "text": "={{ $json.suggested_reply }}\n\nBook a time that suits you: https://yourdomain.com/book",
+        "options": {}
+      },
+      "id": "n7",
+      "name": "Instant Follow-up to Lead (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1168,
+        144
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "Your Business <you@yourdomain.com>",
+        "toEmail": "owner@example.com",
+        "subject": "=HOT LEAD ({{ $json.score }}/10): {{ $json.name }} - {{ $json.service }}",
+        "emailFormat": "text",
+        "text": "={{ $json.summary }}\n\nUrgency: {{ $json.urgency }}\nEmail: {{ $json.email }}\nPhone: {{ $json.phone }}\n\nOriginal message:\n{{ $json.message }}\n\nSuggested reply:\n{{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "n8",
+      "name": "Alert Owner (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1168,
+        320
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "Your Business <you@yourdomain.com>",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=Thanks for reaching out, {{ $json.name }}",
+        "emailFormat": "text",
+        "text": "={{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "n9",
+      "name": "Nurture Email to Lead (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1168,
+        528
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead": {
+      "main": [
+        [
+          {
+            "node": "Gemini: Qualify Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini: Qualify Lead": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Result": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Hot lead? (score >= 7)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hot lead? (score >= 7)": {
+      "main": [
+        [
+          {
+            "node": "Instant Follow-up to Lead (SMTP)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Alert Owner (SMTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nurture Email to Lead (SMTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

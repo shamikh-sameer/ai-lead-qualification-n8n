@@ -1,0 +1,3 @@
+received_at,name,email,phone,service,message,score,category,urgency,summary
+2026-11-03T19:19:35.741Z,Sara Khan,sara@example.com,+14045550123,Emergency AC repair,"AC died today, it is 95 degrees and I need someone out ASAP. Happy to pay for same-day service.",10,hot,high,"Sara's AC stopped working on a 95-degree day and she is requesting emergency same-day service with willingness to pay."
+2026-11-03T19:20:07.765Z,Tom Reed,tom@example.com,,Not sure,"just looking at prices, maybe next year",1,cold,low,"Tom Reed is price-shopping for next year and unsure of the specific service needed."
